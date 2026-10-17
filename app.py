@@ -133,13 +133,21 @@ if st.session_state.app_step == 'upload':
         if st.button("Initialize Deep Analysis & Generate Assessment", type="primary", use_container_width=True):
             if uploaded_file:
                 with st.spinner("Parsing documents & fetching dynamic assessment via internet..."):
-                    text = read_file_smart(uploaded_file)
+                    try:
+                        text = read_file_smart(uploaded_file)
+                    except Exception:  # corrupt, encrypted or mislabelled file
+                        st.error("Could not read this file. Please upload a valid, unencrypted PDF or DOCX resume.")
+                        st.stop()
+
+                    st.session_state.notices = []
+                    if not text.strip():
+                        add_notice("No text could be extracted from the resume (is it a scanned image?). "
+                                   "The assessment will use general questions.")
+
                     skills = extract_skills_from_text(text)
-                    
                     if not skills:
                         skills = ["general computer skills"]
 
-                    st.session_state.notices = []
                     st.session_state.parsed_data = {
                         "skills": skills,
                         "location": user_loc,
