@@ -41,7 +41,7 @@ st.set_page_config(page_title="PM Internship Validator", layout="wide", page_ico
 st.markdown("""
 <style>
     .stApp { background-color: #f4f7f6; font-family: 'Inter', sans-serif; }
-    h1, h2, h3 { color: #1e293b; font-weight: 800 !important; tracking: -0.02em; }
+    h1, h2, h3 { color: #1e293b; font-weight: 800 !important; letter-spacing: -0.02em; }
     div[data-testid="stVerticalBlock"] > div[style*="border"] {
         background: rgba(255, 255, 255, 0.9);
         backdrop-filter: blur(10px);
