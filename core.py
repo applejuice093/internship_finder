@@ -60,13 +60,24 @@ def read_resume_text(filename, file_bytes):
     return text
 
 
+def _skill_pattern(skill):
+    r"""Regex that matches skill as a whole token.
+
+    Plain \b boundaries fail for symbols: r"\bc\+\+\b" never matches
+    "C++ " (there is no word boundary after "+"), and r"\bc\b" matches the
+    "c" inside "C++", "C#" and "Objective-C". Lookarounds that also treat
+    "+", "#" and "-" as part of a token fix both cases.
+    """
+    return re.compile(r"(?<![\w+#-])" + re.escape(skill) + r"(?![\w+#])")
+
+
 def extract_skills_from_text(text):
     """Return the TARGET_SKILLS mentioned in text, in TARGET_SKILLS order."""
     found = []
     text_lower = text.lower()
-    for category, skills in TARGET_SKILLS.items():
+    for skills in TARGET_SKILLS.values():
         for skill in skills:
-            if re.search(r"\b" + re.escape(skill) + r"\b", text_lower) and skill not in found:
+            if skill not in found and _skill_pattern(skill).search(text_lower):
                 found.append(skill)
     return found
 
