@@ -34,6 +34,8 @@ def get_gemini_api_key():
 
 
 GEMINI_API_KEY = get_gemini_api_key()
+# Override with e.g. GEMINI_MODEL=gemini-2.5-pro when the default is retired.
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 
 st.set_page_config(page_title="PM Internship Validator", layout="wide", page_icon="🎯")
@@ -84,7 +86,7 @@ def generate_dynamic_questions(skills, api_key, num_questions=3):
         client = genai.Client(api_key=api_key)
         prompt = build_question_prompt(skills, num_questions)
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=GEMINI_MODEL,
             contents=prompt,
             # Ask for raw JSON so the reply does not come wrapped in markdown.
             config=types.GenerateContentConfig(response_mime_type="application/json"),
