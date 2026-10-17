@@ -185,6 +185,10 @@ elif st.session_state.app_step == 'quiz':
             choice = st.radio("Select your answer:", current_q['options'], index=None, key=f"q_{idx}")
             
             if st.button("Submit Answer", type="primary"):
+                if choice is None:
+                    # Without this, clicking Submit by accident skipped the question as wrong.
+                    st.warning("Please select an answer before submitting.")
+                    st.stop()
                 if choice == current_q['a']:
                     st.session_state.quiz_state['score'] += 1
                 
