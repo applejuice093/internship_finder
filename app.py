@@ -77,9 +77,18 @@ def fetch_internship_database():
     """
     return BUILTIN_INTERNSHIPS
 
+def add_notice(message):
+    """Queue a warning for the quiz page.
+
+    st.warning() called just before st.rerun() is wiped by the rerun, so
+    messages produced while preparing the quiz are kept in session state.
+    """
+    st.session_state.notices.append(message)
+
+
 def generate_dynamic_questions(skills, api_key, num_questions=3):
     if not api_key:
-        st.warning("Running in Offline Mode: Using built-in question bank.")
+        add_notice("Running in Offline Mode: Using built-in question bank.")
         return OFFLINE_QUESTIONS[:num_questions]
 
     try:
@@ -94,7 +103,7 @@ def generate_dynamic_questions(skills, api_key, num_questions=3):
 
         return parse_questions(response.text)
     except Exception as e:  # network, quota, bad key or unusable response
-        st.warning(f"AI question generation failed ({e}). Using the built-in question bank instead.")
+        add_notice(f"AI question generation failed ({e}). Using the built-in question bank instead.")
         return OFFLINE_QUESTIONS[:num_questions]
 
 def read_file_smart(uploaded_file):
@@ -103,6 +112,7 @@ def read_file_smart(uploaded_file):
 if 'app_step' not in st.session_state: st.session_state.app_step = 'upload' 
 if 'parsed_data' not in st.session_state: st.session_state.parsed_data = {}
 if 'quiz_state' not in st.session_state: st.session_state.quiz_state = {'questions': [], 'current_q': 0, 'score': 0}
+if 'notices' not in st.session_state: st.session_state.notices = []
 
 if st.session_state.app_step == 'upload':
     st.markdown("<h1 style='text-align: center;'>AI-Based Internship Recommendation Engine</h1>", unsafe_allow_html=True)
@@ -129,6 +139,7 @@ if st.session_state.app_step == 'upload':
                     if not skills:
                         skills = ["general computer skills"]
 
+                    st.session_state.notices = []
                     st.session_state.parsed_data = {
                         "skills": skills,
                         "location": user_loc,
@@ -144,6 +155,8 @@ if st.session_state.app_step == 'upload':
 elif st.session_state.app_step == 'quiz':
     st.markdown("<h1>🧠 Dynamic Skill Assessment</h1>", unsafe_allow_html=True)
     st.caption("These questions were generated in real-time based on the skills found in your resume.")
+    for notice in st.session_state.notices:
+        st.warning(notice)
     
     qs = st.session_state.quiz_state['questions']
     
@@ -213,4 +226,5 @@ elif st.session_state.app_step == 'results':
         st.session_state.app_step = 'upload'
         st.session_state.parsed_data = {}
         st.session_state.quiz_state = {'questions': [], 'current_q': 0, 'score': 0}
+        st.session_state.notices = []
         st.rerun()
