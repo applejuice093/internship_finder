@@ -1,19 +1,19 @@
 import os
+
 import streamlit as st
 from google import genai
 from google.genai import types
 
 from core import (
     OFFLINE_QUESTIONS,
+    SUPPORTED_RESUME_TYPES,
     build_question_prompt,
     extract_skills_from_text,
     load_internships,
     parse_questions,
     rag_semantic_search,
-    SUPPORTED_RESUME_TYPES,
     read_resume_text,
 )
-
 
 
 def get_gemini_api_key():
