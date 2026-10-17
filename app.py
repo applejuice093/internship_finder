@@ -87,9 +87,9 @@ def generate_dynamic_questions(skills, api_key, num_questions=3):
         response = model.generate_content(prompt)
 
         return parse_questions(response.text)
-    except Exception as e:
-        st.error(f"AI Generation Failed: {e}. Check API Key.")
-        return []
+    except Exception as e:  # network, quota, bad key or unusable response
+        st.warning(f"AI question generation failed ({e}). Using the built-in question bank instead.")
+        return OFFLINE_QUESTIONS[:num_questions]
 
 def read_file_smart(uploaded_file):
     return read_resume_text(uploaded_file.name, uploaded_file.getvalue())

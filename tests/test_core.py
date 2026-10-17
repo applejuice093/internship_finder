@@ -56,3 +56,25 @@ def test_rag_search_does_not_mutate_database():
     profile = {"location": "Remote", "education": "Graduate"}
     rag_semantic_search(profile, ["python"], BUILTIN_INTERNSHIPS)
     assert all("score" not in job for job in BUILTIN_INTERNSHIPS)
+
+
+def test_parse_questions_ignores_text_around_the_array():
+    text = 'Here are your questions:\n[{"q": "Q?", "options": ["A", "B"], "a": "B"}]\nGood luck!'
+    assert parse_questions(text)[0]["a"] == "B"
+
+
+def test_parse_questions_drops_malformed_questions():
+    payload = [
+        {"q": "Good?", "options": ["Yes", "No"], "a": "Yes"},
+        {"q": "Answer missing from options?", "options": ["A", "B"], "a": "C"},
+        {"q": "No options"},
+        {"q": "", "options": ["A", "B"], "a": "A"},
+        "not a dict",
+    ]
+    assert [q["q"] for q in parse_questions(json.dumps(payload))] == ["Good?"]
+
+
+@pytest.mark.parametrize("text", ["", "no json here", "[not json]", "[]", '[{"q": "x"}]'])
+def test_parse_questions_raises_when_nothing_usable(text):
+    with pytest.raises(ValueError):
+        parse_questions(text)

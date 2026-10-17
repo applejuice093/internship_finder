@@ -46,10 +46,42 @@ def build_question_prompt(skills, num_questions):
         """
 
 
+def _is_valid_question(item):
+    """A usable question has text, 2+ unique string options and an answer among them."""
+    if not isinstance(item, dict):
+        return False
+    question, options, answer = item.get("q"), item.get("options"), item.get("a")
+    return (
+        isinstance(question, str)
+        and question.strip() != ""
+        and isinstance(options, list)
+        and len(options) >= 2
+        and all(isinstance(option, str) for option in options)
+        and len(set(options)) == len(options)
+        and answer in options
+    )
+
+
 def parse_questions(response_text):
-    """Turn the model's text reply into a list of question dicts."""
-    clean_json = response_text.replace("```json", "").replace("```", "").strip()
-    return json.loads(clean_json)
+    """Turn the model's text reply into a list of valid question dicts.
+
+    Models sometimes wrap the JSON in markdown fences or add a sentence
+    before it, and occasionally return a question whose answer is not one
+    of its options (which would make it impossible to answer correctly).
+    Those questions are dropped. Raises ValueError if nothing usable is left.
+    """
+    clean = response_text.replace("```json", "").replace("```", "").strip()
+    start, end = clean.find("["), clean.rfind("]")
+    if start == -1 or end < start:
+        raise ValueError("No JSON array found in the model response")
+    try:
+        items = json.loads(clean[start:end + 1])
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Model response is not valid JSON: {exc}") from exc
+    questions = [item for item in items if _is_valid_question(item)]
+    if not questions:
+        raise ValueError("Model response contained no valid questions")
+    return questions
 
 
 SUPPORTED_RESUME_TYPES = ["pdf", "docx"]
