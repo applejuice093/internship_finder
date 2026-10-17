@@ -7,6 +7,7 @@ import json
 import re
 from io import BytesIO
 
+import docx
 import pdfplumber
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -51,13 +52,28 @@ def parse_questions(response_text):
     return json.loads(clean_json)
 
 
+SUPPORTED_RESUME_TYPES = ["pdf", "docx"]
+
+
 def read_resume_text(filename, file_bytes):
-    """Extract plain text from an uploaded resume."""
-    text = ""
-    if filename.endswith(".pdf"):
+    """Extract plain text from an uploaded PDF or Word (.docx) resume.
+
+    The extension check is case-insensitive, so "Resume.PDF" works too.
+    Raises ValueError for any other file type.
+    """
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if extension == "pdf":
         with pdfplumber.open(BytesIO(file_bytes)) as pdf:
-            text = "\n".join([p.extract_text() or "" for p in pdf.pages])
-    return text
+            return "\n".join(page.extract_text() or "" for page in pdf.pages)
+    if extension == "docx":
+        document = docx.Document(BytesIO(file_bytes))
+        lines = [paragraph.text for paragraph in document.paragraphs]
+        # Many resume templates put skills in tables.
+        for table in document.tables:
+            for row in table.rows:
+                lines.extend(cell.text for cell in row.cells)
+        return "\n".join(lines)
+    raise ValueError(f"Unsupported resume type: {filename!r}")
 
 
 def _skill_pattern(skill):

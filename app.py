@@ -1,6 +1,5 @@
 import os
 import streamlit as st
-import docx
 import requests
 import time
 import google.generativeai as genai
@@ -12,6 +11,7 @@ from core import (
     extract_skills_from_text,
     parse_questions,
     rag_semantic_search,
+    SUPPORTED_RESUME_TYPES,
     read_resume_text,
 )
 
@@ -112,7 +112,7 @@ if st.session_state.app_step == 'upload':
         
         st.markdown("---")
         st.markdown("### 📄 Resume Data")
-        uploaded_file = st.file_uploader("Upload Resume (PDF)", type=["pdf"])
+        uploaded_file = st.file_uploader("Upload Resume (PDF or DOCX)", type=SUPPORTED_RESUME_TYPES)
         
         if st.button("Initialize Deep Analysis & Generate Assessment", type="primary", use_container_width=True):
             if uploaded_file:
