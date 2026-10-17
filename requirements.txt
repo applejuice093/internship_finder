@@ -1,8 +1,9 @@
-streamlit
-requests==2.31.0
-pandas
-numpy
-scikit-learn
-Pillow==10.3.0
-python-docx
-google-generativeai
+# Runtime dependencies for app.py (tested with Python 3.10-3.13).
+# Lower bounds are versions with the APIs the app uses; upper bounds
+# stop a future major release from breaking the app silently.
+streamlit>=1.37,<2          # st.container(border=True), st.link_button
+pdfplumber>=0.11,<1         # PDF resume text extraction
+python-docx>=1.1,<2         # imported as `docx`
+scikit-learn>=1.3,<2        # TF-IDF + cosine similarity matching
+google-generativeai>=0.8,<1 # Gemini question generation
+requests>=2.32.4,<3         # 2.31.0 had CVE-2024-35195 / CVE-2024-47081
