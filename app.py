@@ -2,7 +2,8 @@ import os
 import streamlit as st
 import requests
 import time
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from core import (
     BUILTIN_INTERNSHIPS,
@@ -80,11 +81,14 @@ def generate_dynamic_questions(skills, api_key, num_questions=3):
         return OFFLINE_QUESTIONS[:num_questions]
 
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        
+        client = genai.Client(api_key=api_key)
         prompt = build_question_prompt(skills, num_questions)
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            # Ask for raw JSON so the reply does not come wrapped in markdown.
+            config=types.GenerateContentConfig(response_mime_type="application/json"),
+        )
 
         return parse_questions(response.text)
     except Exception as e:  # network, quota, bad key or unusable response
