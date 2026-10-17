@@ -1,0 +1,4 @@
+# Tools for running the tests and linter: pip install -r requirements-dev.txt
+-r requirements.txt
+pytest>=8
+ruff>=0.5

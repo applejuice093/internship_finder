@@ -1,17 +1,39 @@
+import os
+
 import streamlit as st
-import pdfplumber
-import docx
-import requests
-import re
-import json
-import time
-from io import BytesIO
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+from core import (
+    OFFLINE_QUESTIONS,
+    SUPPORTED_RESUME_TYPES,
+    build_question_prompt,
+    extract_skills_from_text,
+    load_internships,
+    parse_questions,
+    rag_semantic_search,
+    read_resume_text,
+)
 
-GEMINI_API_KEY = "AIzaSyAsQPpZAlPxjw70sUjq2aDW96sqC-lrlGw" 
+
+def get_gemini_api_key():
+    """Read the Gemini API key from the environment or .streamlit/secrets.toml.
+
+    Never hard-code the key in this file: the repository is public.
+    Returns an empty string when no key is configured (offline mode).
+    """
+    key = os.environ.get("GEMINI_API_KEY", "")
+    if key:
+        return key
+    try:
+        return st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:  # no secrets.toml present
+        return ""
+
+
+GEMINI_API_KEY = get_gemini_api_key()
+# Override with e.g. GEMINI_MODEL=gemini-2.5-pro when the default is retired.
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 
 st.set_page_config(page_title="PM Internship Validator", layout="wide", page_icon="🎯")
@@ -19,7 +41,7 @@ st.set_page_config(page_title="PM Internship Validator", layout="wide", page_ico
 st.markdown("""
 <style>
     .stApp { background-color: #f4f7f6; font-family: 'Inter', sans-serif; }
-    h1, h2, h3 { color: #1e293b; font-weight: 800 !important; tracking: -0.02em; }
+    h1, h2, h3 { color: #1e293b; font-weight: 800 !important; letter-spacing: -0.02em; }
     div[data-testid="stVerticalBlock"] > div[style*="border"] {
         background: rgba(255, 255, 255, 0.9);
         backdrop-filter: blur(10px);
@@ -41,95 +63,52 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-TARGET_SKILLS = {
-    "Core_Languages": ["python", "c++", "c", "java", "javascript", "sql", "typescript"],
-    "AI_ML": ["pytorch", "tensorflow", "scikit-learn", "pandas", "llm"],
-    "Frameworks": ["fastapi", "react", "node", "django", "spring"],
-    "Daily_Tooling": ["git", "github", "docker", "aws"],
-}
+@st.cache_data(ttl=600)
+def fetch_internship_database(url):
+    """Load internship postings, cached for 10 minutes.
 
-@st.cache_data 
-def fetch_internship_database():
+    Set INTERNSHIP_DB_URL to a JSON array (e.g. a GitHub Gist "Raw" URL)
+    shaped like core.BUILTIN_INTERNSHIPS to fetch live postings. Without
+    it, or if the download fails, the built-in sample postings are used.
     """
-    Simulates fetching real-time internship postings from a database.
-    PRO TIP FOR VIVA: If you want to prove it fetches from the internet, 
-    paste the list below into a free GitHub Gist, get the 'Raw' URL, and uncomment the code below:
-    
-    # response = requests.get("https://gist.githubusercontent.com/YOUR_RAW_URL_HERE")
-    # return response.json()
+    return load_internships(url)
+
+def add_notice(message):
+    """Queue a warning for the quiz page.
+
+    st.warning() called just before st.rerun() is wiped by the rerun, so
+    messages produced while preparing the quiz are kept in session state.
     """
-    return [
-        {"id": 1, "title": "Junior Backend Intern", "company": "TechGram", "location": "Remote", "education": "Graduate", "skills": ["python", "sql", "api"], "description": "Build robust backend APIs using Python and SQL for rural e-governance platforms.", "apply_url": "https://pminternship.mca.gov.in/"},
-        {"id": 2, "title": "Frontend Trainee", "company": "JanMitra", "location": "Maharashtra", "education": "Diploma", "skills": ["javascript", "react", "ui"], "description": "Design accessible, user-friendly interfaces using React and JavaScript for mobile devices.", "apply_url": "https://pminternship.mca.gov.in/"},
-        {"id": 3, "title": "Data & Cloud Intern", "company": "AgriData Co.", "location": "Remote", "education": "Graduate", "skills": ["python", "aws", "sql"], "description": "Manage massive agricultural crop databases hosted on AWS cloud.", "apply_url": "https://pminternship.mca.gov.in/"},
-    ]
+    st.session_state.notices.append(message)
+
 
 def generate_dynamic_questions(skills, api_key, num_questions=3):
-    if not api_key or api_key == "PASTE_YOUR_KEY_HERE":
-        st.warning("Running in Offline Mode: Using built-in question bank.")
-        return [
-            {"q": "What is Object-Oriented Programming (OOP)?", "options": ["A programming paradigm", "A hardware component", "A database structure", "An operating system"], "a": "A programming paradigm"},
-            {"q": "Which data structure uses a Last-In-First-Out (LIFO) model?", "options": ["Queue", "Array", "Stack", "Linked List"], "a": "Stack"},
-            {"q": "What is the primary purpose of version control systems like Git?", "options": ["Compiling code", "Tracking code changes and collaboration", "Designing user interfaces", "Scanning for viruses"], "a": "Tracking code changes and collaboration"}
-        ][:num_questions]
+    if not api_key:
+        add_notice("Running in Offline Mode: Using built-in question bank.")
+        return OFFLINE_QUESTIONS[:num_questions]
 
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        
-        prompt = f"""
-        You are a technical interviewer. The candidate has these skills: {', '.join(skills)}.
-        Generate {num_questions} UNIQUE and DISTINCT multiple-choice interview questions testing different aspects of these skills. 
-        Ensure no two questions are about the same exact topic.
-        Return ONLY a valid JSON array of objects. Do not use markdown blocks.
-        Format: [{{"q": "Question text?", "options": ["A", "B", "C", "D"], "a": "Exact text of correct option"}}]
-        """
-        response = model.generate_content(prompt)
+        client = genai.Client(api_key=api_key)
+        prompt = build_question_prompt(skills, num_questions)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            # Ask for raw JSON so the reply does not come wrapped in markdown.
+            config=types.GenerateContentConfig(response_mime_type="application/json"),
+        )
 
-        clean_json = response.text.replace("```json", "").replace("```", "").strip()
-        questions = json.loads(clean_json)
-        return questions
-    except Exception as e:
-        st.error(f"AI Generation Failed: {e}. Check API Key.")
-        return []
+        return parse_questions(response.text)
+    except Exception as e:  # network, quota, bad key or unusable response
+        add_notice(f"AI question generation failed ({e}). Using the built-in question bank instead.")
+        return OFFLINE_QUESTIONS[:num_questions]
 
 def read_file_smart(uploaded_file):
-    text = ""
-    file_bytes = uploaded_file.getvalue()
-    if uploaded_file.name.endswith(".pdf"):
-        with pdfplumber.open(BytesIO(file_bytes)) as pdf:
-            text = "\n".join([p.extract_text() or "" for p in pdf.pages])
-    return text
-
-def extract_skills_from_text(text):
-    found = []
-    text_lower = text.lower()
-    for category, skills in TARGET_SKILLS.items():
-        for skill in skills:
-            if re.search(r"\b" + re.escape(skill) + r"\b", text_lower) and skill not in found:
-                found.append(skill)
-    return found
-
-def rag_semantic_search(user_profile, user_skills, db_jobs, top_n=3):
-    corpus = [f"{j['title']} {j['company']} {j['location']} {' '.join(j['skills'])} {j['description']}" for j in db_jobs]
-    query = f"{user_profile['location']} {user_profile['education']} {' '.join(user_skills)}"
-    
-    vectorizer = TfidfVectorizer()
-    tfidf_matrix = vectorizer.fit_transform(corpus + [query])
-    cosine_similarities = cosine_similarity(tfidf_matrix[-1], tfidf_matrix[:-1]).flatten()
-    
-    ranked = []
-    for idx, score in enumerate(cosine_similarities):
-        intern_data = db_jobs[idx].copy()
-        intern_data['score'] = min(int(score * 100) + 15, 99) 
-        ranked.append(intern_data)
-        
-    ranked.sort(key=lambda x: x['score'], reverse=True)
-    return ranked[:top_n]
+    return read_resume_text(uploaded_file.name, uploaded_file.getvalue())
 
 if 'app_step' not in st.session_state: st.session_state.app_step = 'upload' 
 if 'parsed_data' not in st.session_state: st.session_state.parsed_data = {}
 if 'quiz_state' not in st.session_state: st.session_state.quiz_state = {'questions': [], 'current_q': 0, 'score': 0}
+if 'notices' not in st.session_state: st.session_state.notices = []
 
 if st.session_state.app_step == 'upload':
     st.markdown("<h1 style='text-align: center;'>AI-Based Internship Recommendation Engine</h1>", unsafe_allow_html=True)
@@ -145,14 +124,23 @@ if st.session_state.app_step == 'upload':
         
         st.markdown("---")
         st.markdown("### 📄 Resume Data")
-        uploaded_file = st.file_uploader("Upload Resume (PDF)", type=["pdf"])
+        uploaded_file = st.file_uploader("Upload Resume (PDF or DOCX)", type=SUPPORTED_RESUME_TYPES)
         
         if st.button("Initialize Deep Analysis & Generate Assessment", type="primary", use_container_width=True):
             if uploaded_file:
                 with st.spinner("Parsing documents & fetching dynamic assessment via internet..."):
-                    text = read_file_smart(uploaded_file)
+                    try:
+                        text = read_file_smart(uploaded_file)
+                    except Exception:  # corrupt, encrypted or mislabelled file
+                        st.error("Could not read this file. Please upload a valid, unencrypted PDF or DOCX resume.")
+                        st.stop()
+
+                    st.session_state.notices = []
+                    if not text.strip():
+                        add_notice("No text could be extracted from the resume (is it a scanned image?). "
+                                   "The assessment will use general questions.")
+
                     skills = extract_skills_from_text(text)
-                    
                     if not skills:
                         skills = ["general computer skills"]
 
@@ -171,6 +159,8 @@ if st.session_state.app_step == 'upload':
 elif st.session_state.app_step == 'quiz':
     st.markdown("<h1>🧠 Dynamic Skill Assessment</h1>", unsafe_allow_html=True)
     st.caption("These questions were generated in real-time based on the skills found in your resume.")
+    for notice in st.session_state.notices:
+        st.warning(notice)
     
     qs = st.session_state.quiz_state['questions']
     
@@ -191,6 +181,10 @@ elif st.session_state.app_step == 'quiz':
             choice = st.radio("Select your answer:", current_q['options'], index=None, key=f"q_{idx}")
             
             if st.button("Submit Answer", type="primary"):
+                if choice is None:
+                    # Without this, clicking Submit by accident skipped the question as wrong.
+                    st.warning("Please select an answer before submitting.")
+                    st.stop()
                 if choice == current_q['a']:
                     st.session_state.quiz_state['score'] += 1
                 
@@ -218,10 +212,11 @@ elif st.session_state.app_step == 'results':
     st.markdown("---")
     st.markdown("### 💼 Semantic AI Recommendations")
     
-    with st.spinner("Running TF-IDF Vectorization & Cosine Similarity against live database..."):
-        db_jobs = fetch_internship_database()
+    with st.spinner("Running TF-IDF vectorization & cosine similarity against the internship database..."):
+        db_jobs, db_error = fetch_internship_database(os.environ.get("INTERNSHIP_DB_URL", ""))
+        if db_error:
+            st.warning(db_error + " Showing the built-in sample internships instead.")
         top_matches = rag_semantic_search({"location": data["location"], "education": data["education"]}, data["skills"], db_jobs, top_n=3)
-        time.sleep(1)
     
     for intern in top_matches:
         with st.container(border=True):
@@ -240,4 +235,5 @@ elif st.session_state.app_step == 'results':
         st.session_state.app_step = 'upload'
         st.session_state.parsed_data = {}
         st.session_state.quiz_state = {'questions': [], 'current_q': 0, 'score': 0}
+        st.session_state.notices = []
         st.rerun()
