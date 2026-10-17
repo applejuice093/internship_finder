@@ -1,15 +1,13 @@
 import os
 import streamlit as st
-import requests
-import time
 from google import genai
 from google.genai import types
 
 from core import (
-    BUILTIN_INTERNSHIPS,
     OFFLINE_QUESTIONS,
     build_question_prompt,
     extract_skills_from_text,
+    load_internships,
     parse_questions,
     rag_semantic_search,
     SUPPORTED_RESUME_TYPES,
@@ -65,17 +63,15 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-@st.cache_data 
-def fetch_internship_database():
+@st.cache_data(ttl=600)
+def fetch_internship_database(url):
+    """Load internship postings, cached for 10 minutes.
+
+    Set INTERNSHIP_DB_URL to a JSON array (e.g. a GitHub Gist "Raw" URL)
+    shaped like core.BUILTIN_INTERNSHIPS to fetch live postings. Without
+    it, or if the download fails, the built-in sample postings are used.
     """
-    Simulates fetching real-time internship postings from a database.
-    PRO TIP FOR VIVA: If you want to prove it fetches from the internet, 
-    paste the list below into a free GitHub Gist, get the 'Raw' URL, and uncomment the code below:
-    
-    # response = requests.get("https://gist.githubusercontent.com/YOUR_RAW_URL_HERE")
-    # return response.json()
-    """
-    return BUILTIN_INTERNSHIPS
+    return load_internships(url)
 
 def add_notice(message):
     """Queue a warning for the quiz page.
@@ -216,10 +212,11 @@ elif st.session_state.app_step == 'results':
     st.markdown("---")
     st.markdown("### 💼 Semantic AI Recommendations")
     
-    with st.spinner("Running TF-IDF Vectorization & Cosine Similarity against live database..."):
-        db_jobs = fetch_internship_database()
+    with st.spinner("Running TF-IDF vectorization & cosine similarity against the internship database..."):
+        db_jobs, db_error = fetch_internship_database(os.environ.get("INTERNSHIP_DB_URL", ""))
+        if db_error:
+            st.warning(db_error + " Showing the built-in sample internships instead.")
         top_matches = rag_semantic_search({"location": data["location"], "education": data["education"]}, data["skills"], db_jobs, top_n=3)
-        time.sleep(1)
     
     for intern in top_matches:
         with st.container(border=True):

@@ -9,6 +9,7 @@ from io import BytesIO
 
 import docx
 import pdfplumber
+import requests
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -26,6 +27,38 @@ BUILTIN_INTERNSHIPS = [
     {"id": 2, "title": "Frontend Trainee", "company": "JanMitra", "location": "Maharashtra", "education": "Diploma", "skills": ["javascript", "react", "ui"], "description": "Design accessible, user-friendly interfaces using React and JavaScript for mobile devices.", "apply_url": "https://pminternship.mca.gov.in/"},
     {"id": 3, "title": "Data & Cloud Intern", "company": "AgriData Co.", "location": "Remote", "education": "Graduate", "skills": ["python", "aws", "sql"], "description": "Manage massive agricultural crop databases hosted on AWS cloud.", "apply_url": "https://pminternship.mca.gov.in/"},
 ]
+
+REQUIRED_INTERNSHIP_FIELDS = ("title", "company", "location", "education", "skills", "description", "apply_url")
+
+
+def load_internships(url=None, timeout=10):
+    """Return internship postings from a JSON URL, or the built-in list.
+
+    url should point at a JSON array shaped like BUILTIN_INTERNSHIPS (for
+    example the "Raw" link of a GitHub Gist). Postings missing a required
+    field are skipped. Returns (postings, error_message); error_message is
+    None on success and explains why the built-in list was used otherwise.
+    """
+    if not url:
+        return BUILTIN_INTERNSHIPS, None
+    try:
+        response = requests.get(url, timeout=timeout)
+        response.raise_for_status()
+        data = response.json()
+    except (requests.RequestException, ValueError) as exc:
+        return BUILTIN_INTERNSHIPS, f"Could not load internships from {url} ({exc})."
+    if not isinstance(data, list):
+        return BUILTIN_INTERNSHIPS, f"Internship data at {url} is not a JSON list."
+    postings = [
+        item for item in data
+        if isinstance(item, dict)
+        and all(field in item for field in REQUIRED_INTERNSHIP_FIELDS)
+        and isinstance(item["skills"], list)
+    ]
+    if not postings:
+        return BUILTIN_INTERNSHIPS, f"No valid internships found at {url}."
+    return postings, None
+
 
 # Questions used when no Gemini API key is configured (offline mode).
 OFFLINE_QUESTIONS = [
