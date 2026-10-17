@@ -1,16 +1,19 @@
 import os
 import streamlit as st
-import pdfplumber
 import docx
 import requests
-import re
-import json
 import time
-from io import BytesIO
 import google.generativeai as genai
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+from core import (
+    BUILTIN_INTERNSHIPS,
+    OFFLINE_QUESTIONS,
+    build_question_prompt,
+    extract_skills_from_text,
+    parse_questions,
+    rag_semantic_search,
+    read_resume_text,
+)
 
 
 
@@ -59,13 +62,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-TARGET_SKILLS = {
-    "Core_Languages": ["python", "c++", "c", "java", "javascript", "sql", "typescript"],
-    "AI_ML": ["pytorch", "tensorflow", "scikit-learn", "pandas", "llm"],
-    "Frameworks": ["fastapi", "react", "node", "django", "spring"],
-    "Daily_Tooling": ["git", "github", "docker", "aws"],
-}
-
 @st.cache_data 
 def fetch_internship_database():
     """
@@ -76,74 +72,27 @@ def fetch_internship_database():
     # response = requests.get("https://gist.githubusercontent.com/YOUR_RAW_URL_HERE")
     # return response.json()
     """
-    return [
-        {"id": 1, "title": "Junior Backend Intern", "company": "TechGram", "location": "Remote", "education": "Graduate", "skills": ["python", "sql", "api"], "description": "Build robust backend APIs using Python and SQL for rural e-governance platforms.", "apply_url": "https://pminternship.mca.gov.in/"},
-        {"id": 2, "title": "Frontend Trainee", "company": "JanMitra", "location": "Maharashtra", "education": "Diploma", "skills": ["javascript", "react", "ui"], "description": "Design accessible, user-friendly interfaces using React and JavaScript for mobile devices.", "apply_url": "https://pminternship.mca.gov.in/"},
-        {"id": 3, "title": "Data & Cloud Intern", "company": "AgriData Co.", "location": "Remote", "education": "Graduate", "skills": ["python", "aws", "sql"], "description": "Manage massive agricultural crop databases hosted on AWS cloud.", "apply_url": "https://pminternship.mca.gov.in/"},
-    ]
+    return BUILTIN_INTERNSHIPS
 
 def generate_dynamic_questions(skills, api_key, num_questions=3):
     if not api_key:
         st.warning("Running in Offline Mode: Using built-in question bank.")
-        return [
-            {"q": "What is Object-Oriented Programming (OOP)?", "options": ["A programming paradigm", "A hardware component", "A database structure", "An operating system"], "a": "A programming paradigm"},
-            {"q": "Which data structure uses a Last-In-First-Out (LIFO) model?", "options": ["Queue", "Array", "Stack", "Linked List"], "a": "Stack"},
-            {"q": "What is the primary purpose of version control systems like Git?", "options": ["Compiling code", "Tracking code changes and collaboration", "Designing user interfaces", "Scanning for viruses"], "a": "Tracking code changes and collaboration"}
-        ][:num_questions]
+        return OFFLINE_QUESTIONS[:num_questions]
 
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.5-flash')
         
-        prompt = f"""
-        You are a technical interviewer. The candidate has these skills: {', '.join(skills)}.
-        Generate {num_questions} UNIQUE and DISTINCT multiple-choice interview questions testing different aspects of these skills. 
-        Ensure no two questions are about the same exact topic.
-        Return ONLY a valid JSON array of objects. Do not use markdown blocks.
-        Format: [{{"q": "Question text?", "options": ["A", "B", "C", "D"], "a": "Exact text of correct option"}}]
-        """
+        prompt = build_question_prompt(skills, num_questions)
         response = model.generate_content(prompt)
 
-        clean_json = response.text.replace("```json", "").replace("```", "").strip()
-        questions = json.loads(clean_json)
-        return questions
+        return parse_questions(response.text)
     except Exception as e:
         st.error(f"AI Generation Failed: {e}. Check API Key.")
         return []
 
 def read_file_smart(uploaded_file):
-    text = ""
-    file_bytes = uploaded_file.getvalue()
-    if uploaded_file.name.endswith(".pdf"):
-        with pdfplumber.open(BytesIO(file_bytes)) as pdf:
-            text = "\n".join([p.extract_text() or "" for p in pdf.pages])
-    return text
-
-def extract_skills_from_text(text):
-    found = []
-    text_lower = text.lower()
-    for category, skills in TARGET_SKILLS.items():
-        for skill in skills:
-            if re.search(r"\b" + re.escape(skill) + r"\b", text_lower) and skill not in found:
-                found.append(skill)
-    return found
-
-def rag_semantic_search(user_profile, user_skills, db_jobs, top_n=3):
-    corpus = [f"{j['title']} {j['company']} {j['location']} {' '.join(j['skills'])} {j['description']}" for j in db_jobs]
-    query = f"{user_profile['location']} {user_profile['education']} {' '.join(user_skills)}"
-    
-    vectorizer = TfidfVectorizer()
-    tfidf_matrix = vectorizer.fit_transform(corpus + [query])
-    cosine_similarities = cosine_similarity(tfidf_matrix[-1], tfidf_matrix[:-1]).flatten()
-    
-    ranked = []
-    for idx, score in enumerate(cosine_similarities):
-        intern_data = db_jobs[idx].copy()
-        intern_data['score'] = min(int(score * 100) + 15, 99) 
-        ranked.append(intern_data)
-        
-    ranked.sort(key=lambda x: x['score'], reverse=True)
-    return ranked[:top_n]
+    return read_resume_text(uploaded_file.name, uploaded_file.getvalue())
 
 if 'app_step' not in st.session_state: st.session_state.app_step = 'upload' 
 if 'parsed_data' not in st.session_state: st.session_state.parsed_data = {}
