@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pdfplumber
 import docx
@@ -11,7 +12,24 @@ import google.generativeai as genai
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-GEMINI_API_KEY = "AIzaSyAsQPpZAlPxjw70sUjq2aDW96sqC-lrlGw" 
+
+
+def get_gemini_api_key():
+    """Read the Gemini API key from the environment or .streamlit/secrets.toml.
+
+    Never hard-code the key in this file: the repository is public.
+    Returns an empty string when no key is configured (offline mode).
+    """
+    key = os.environ.get("GEMINI_API_KEY", "")
+    if key:
+        return key
+    try:
+        return st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:  # no secrets.toml present
+        return ""
+
+
+GEMINI_API_KEY = get_gemini_api_key()
 
 
 st.set_page_config(page_title="PM Internship Validator", layout="wide", page_icon="🎯")
@@ -65,7 +83,7 @@ def fetch_internship_database():
     ]
 
 def generate_dynamic_questions(skills, api_key, num_questions=3):
-    if not api_key or api_key == "PASTE_YOUR_KEY_HERE":
+    if not api_key:
         st.warning("Running in Offline Mode: Using built-in question bank.")
         return [
             {"q": "What is Object-Oriented Programming (OOP)?", "options": ["A programming paradigm", "A hardware component", "A database structure", "An operating system"], "a": "A programming paradigm"},
