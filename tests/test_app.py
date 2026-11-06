@@ -63,3 +63,12 @@ def test_submit_without_answer_does_not_skip_question(app):
     app.button[0].click().run()  # "Submit Answer" with nothing selected
     assert any("Please select an answer" in w.value for w in app.warning)
     assert app.session_state.quiz_state["current_q"] == 0
+
+
+def test_oversized_resume_is_rejected(app):
+    # Bypass Streamlit size quirks by uploading a payload just over 5 MB.
+    huge = b"%PDF-1.4 " + (b"x" * (5 * 1024 * 1024 + 1))
+    start_analysis(app, filename="huge.pdf", content=huge)
+    assert not app.exception
+    assert any("too large" in e.value.lower() for e in app.error)
+    assert app.session_state.app_step == "upload"

@@ -3,7 +3,7 @@ from io import BytesIO
 import docx
 import pytest
 
-from core import extract_skills_from_text, read_resume_text
+from core import assert_resume_size_ok, extract_skills_from_text, read_resume_text
 
 
 def make_pdf(text):
@@ -60,3 +60,12 @@ def test_reads_docx_paragraphs_and_tables():
 def test_rejects_unsupported_types(name):
     with pytest.raises(ValueError):
         read_resume_text(name, b"")
+
+
+def test_assert_resume_size_ok_accepts_small_files():
+    assert_resume_size_ok(b"x" * 100)
+
+
+def test_assert_resume_size_ok_rejects_oversize_files():
+    with pytest.raises(ValueError, match="too large"):
+        assert_resume_size_ok(b"x" * 100, limit=50)

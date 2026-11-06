@@ -1,3 +1,4 @@
+import html
 import os
 
 import streamlit as st
@@ -7,12 +8,14 @@ from google.genai import types
 from core import (
     OFFLINE_QUESTIONS,
     SUPPORTED_RESUME_TYPES,
+    assert_resume_size_ok,
     build_question_prompt,
     extract_skills_from_text,
     load_internships,
     parse_questions,
     rag_semantic_search,
     read_resume_text,
+    shared_skills,
 )
 
 
@@ -103,7 +106,9 @@ def generate_dynamic_questions(skills, api_key, num_questions=3):
         return OFFLINE_QUESTIONS[:num_questions]
 
 def read_file_smart(uploaded_file):
-    return read_resume_text(uploaded_file.name, uploaded_file.getvalue())
+    file_bytes = uploaded_file.getvalue()
+    assert_resume_size_ok(file_bytes)
+    return read_resume_text(uploaded_file.name, file_bytes)
 
 if 'app_step' not in st.session_state: st.session_state.app_step = 'upload' 
 if 'parsed_data' not in st.session_state: st.session_state.parsed_data = {}
@@ -131,6 +136,10 @@ if st.session_state.app_step == 'upload':
                 with st.spinner("Parsing documents & fetching dynamic assessment via internet..."):
                     try:
                         text = read_file_smart(uploaded_file)
+                    except ValueError as exc:
+                        # Size limit or unsupported type from core helpers.
+                        st.error(str(exc))
+                        st.stop()
                     except Exception:  # corrupt, encrypted or mislabelled file
                         st.error("Could not read this file. Please upload a valid, unencrypted PDF or DOCX resume.")
                         st.stop()
@@ -206,7 +215,9 @@ elif st.session_state.app_step == 'results':
     c3.metric("Profile Status", "Ready for Matching")
     
     st.markdown("### 🔑 Verified Competencies")
-    skills_html = "".join([f"<span class='skill-badge'>{skill.upper()}</span>" for skill in data['skills']])
+    skills_html = "".join(
+        f"<span class='skill-badge'>{html.escape(skill.upper())}</span>" for skill in data["skills"]
+    )
     st.markdown(skills_html, unsafe_allow_html=True)
     
     st.markdown("---")
@@ -217,13 +228,20 @@ elif st.session_state.app_step == 'results':
         if db_error:
             st.warning(db_error + " Showing the built-in sample internships instead.")
         top_matches = rag_semantic_search({"location": data["location"], "education": data["education"]}, data["skills"], db_jobs, top_n=3)
-    
+
+    if not top_matches:
+        st.info("No internships are available to match against right now. Try again later or check INTERNSHIP_DB_URL.")
+
     for intern in top_matches:
         with st.container(border=True):
             col_a, col_b = st.columns([3, 1])
             with col_a:
                 st.markdown(f"### {intern['title']} @ {intern['company']}")
                 st.caption(f"📍 {intern['location']} | 🎓 {intern['education']}")
+                overlap = shared_skills(data["skills"], intern.get("skills", []))
+                if overlap:
+                    # Plain text caption — no HTML — so skill names cannot XSS.
+                    st.caption("Shared skills: " + ", ".join(overlap))
                 st.write(intern['description'])
             with col_b:
                 color = "#059669" if intern['score'] > 60 else "#d97706"

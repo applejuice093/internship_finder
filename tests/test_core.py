@@ -5,9 +5,12 @@ import pytest
 from core import (
     BUILTIN_INTERNSHIPS,
     OFFLINE_QUESTIONS,
+    PROFILE_MATCH_BOOST,
+    apply_profile_boost,
     extract_skills_from_text,
     parse_questions,
     rag_semantic_search,
+    shared_skills,
 )
 
 
@@ -21,6 +24,9 @@ from core import (
         ("Objective-C and C# only", []),
         ("GitHub user", ["github"]),
         ("Built APIs with Node.js and React", ["react", "node"]),
+        ("Flask + MongoDB on Linux", ["flask", "mongodb", "linux"]),
+        ("Redis cache and Excel reports", ["redis", "excel"]),
+        ("HTML, CSS and Keras", ["html", "css", "keras"]),
     ],
 )
 def test_extract_skills(text, expected):
@@ -78,3 +84,24 @@ def test_parse_questions_drops_malformed_questions():
 def test_parse_questions_raises_when_nothing_usable(text):
     with pytest.raises(ValueError):
         parse_questions(text)
+
+
+def test_rag_search_returns_empty_list_for_empty_database():
+    profile = {"location": "Remote", "education": "Graduate"}
+    assert rag_semantic_search(profile, ["python"], [], top_n=3) == []
+
+
+def test_profile_match_boosts_score():
+    """Location and education matches each add PROFILE_MATCH_BOOST, capped at 99."""
+    job = {"location": "Remote", "education": "Graduate"}
+    profile = {"location": "Remote", "education": "Graduate"}
+    other = {"location": "Delhi", "education": "Diploma"}
+    assert apply_profile_boost(40, job, profile) == 40 + 2 * PROFILE_MATCH_BOOST
+    assert apply_profile_boost(40, job, other) == 40
+    assert apply_profile_boost(40, job, {"location": "Remote", "education": "Diploma"}) == 40 + PROFILE_MATCH_BOOST
+    assert apply_profile_boost(95, job, profile) == 99  # still capped
+
+
+def test_shared_skills_preserves_candidate_order_and_dedupes():
+    assert shared_skills(["python", "sql", "python", "aws"], ["aws", "python", "docker"]) == ["python", "aws"]
+    assert shared_skills(["react"], ["python"]) == []

@@ -6,6 +6,8 @@ and matching code can be unit tested without starting a Streamlit app.
 import json
 import re
 from io import BytesIO
+from typing import Any, Optional
+from urllib.parse import urlparse
 
 import docx
 import pdfplumber
@@ -15,10 +17,11 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 # Skills we look for in a resume, grouped only for readability.
 TARGET_SKILLS = {
-    "Core_Languages": ["python", "c++", "c", "java", "javascript", "sql", "typescript"],
-    "AI_ML": ["pytorch", "tensorflow", "scikit-learn", "pandas", "llm"],
-    "Frameworks": ["fastapi", "react", "node", "django", "spring"],
-    "Daily_Tooling": ["git", "github", "docker", "aws"],
+    "Core_Languages": ["python", "c++", "c", "java", "javascript", "sql", "typescript", "html", "css"],
+    "AI_ML": ["pytorch", "tensorflow", "scikit-learn", "pandas", "llm", "keras"],
+    "Frameworks": ["fastapi", "flask", "react", "node", "django", "spring"],
+    "Data_Stores": ["mongodb", "redis"],
+    "Daily_Tooling": ["git", "github", "docker", "aws", "linux", "excel"],
 }
 
 # Built-in sample postings used as the internship "database".
@@ -26,26 +29,57 @@ BUILTIN_INTERNSHIPS = [
     {"id": 1, "title": "Junior Backend Intern", "company": "TechGram", "location": "Remote", "education": "Graduate", "skills": ["python", "sql", "api"], "description": "Build robust backend APIs using Python and SQL for rural e-governance platforms.", "apply_url": "https://pminternship.mca.gov.in/"},
     {"id": 2, "title": "Frontend Trainee", "company": "JanMitra", "location": "Maharashtra", "education": "Diploma", "skills": ["javascript", "react", "ui"], "description": "Design accessible, user-friendly interfaces using React and JavaScript for mobile devices.", "apply_url": "https://pminternship.mca.gov.in/"},
     {"id": 3, "title": "Data & Cloud Intern", "company": "AgriData Co.", "location": "Remote", "education": "Graduate", "skills": ["python", "aws", "sql"], "description": "Manage massive agricultural crop databases hosted on AWS cloud.", "apply_url": "https://pminternship.mca.gov.in/"},
+    {"id": 4, "title": "Flask Web Intern", "company": "SevaSoft", "location": "Delhi", "education": "Graduate", "skills": ["python", "flask", "mongodb", "linux"], "description": "Ship internal citizen-service portals with Flask, MongoDB and Linux deployment scripts.", "apply_url": "https://pminternship.mca.gov.in/"},
+    {"id": 5, "title": "UI Content Intern", "company": "GramUI", "location": "Andhra Pradesh", "education": "12th Pass", "skills": ["html", "css", "javascript", "excel"], "description": "Create accessible HTML/CSS landing pages and maintain outreach trackers in Excel.", "apply_url": "https://pminternship.mca.gov.in/"},
+    {"id": 6, "title": "Cache & Ops Trainee", "company": "RapidQueue", "location": "Remote", "education": "Diploma", "skills": ["redis", "linux", "docker", "python"], "description": "Operate Redis caches and Dockerized workers that keep rural service queues responsive.", "apply_url": "https://pminternship.mca.gov.in/"},
 ]
 
 REQUIRED_INTERNSHIP_FIELDS = ("title", "company", "location", "education", "skills", "description", "apply_url")
+INTERNSHIP_DB_USER_AGENT = "internship-finder/1.0 (+https://github.com/applejuice093/internship_finder)"
+MAX_INTERNSHIP_DB_BYTES = 2 * 1024 * 1024  # 2 MB cap for remote JSON payloads
+
+def _is_http_url(value):
+    """True when value is an absolute http(s) URL with a network location."""
+    if not isinstance(value, str):
+        return False
+    parsed = urlparse(value.strip())
+    return parsed.scheme in ("http", "https") and bool(parsed.netloc)
 
 
-def load_internships(url=None, timeout=10):
+def load_internships(url: Optional[str] = None, timeout: int = 10) -> tuple[list[dict[str, Any]], Optional[str]]:
     """Return internship postings from a JSON URL, or the built-in list.
 
     url should point at a JSON array shaped like BUILTIN_INTERNSHIPS (for
     example the "Raw" link of a GitHub Gist). Postings missing a required
-    field are skipped. Returns (postings, error_message); error_message is
-    None on success and explains why the built-in list was used otherwise.
+    field, or whose apply_url is not an absolute http(s) URL, are skipped.
+    Returns (postings, error_message); error_message is None on success and
+    explains why the built-in list was used otherwise.
     """
     if not url:
         return BUILTIN_INTERNSHIPS, None
     try:
-        response = requests.get(url, timeout=timeout)
+        response = requests.get(
+            url,
+            timeout=timeout,
+            headers={"User-Agent": INTERNSHIP_DB_USER_AGENT},
+            stream=True,
+        )
         response.raise_for_status()
-        data = response.json()
-    except (requests.RequestException, ValueError) as exc:
+        # Cap body size so a huge response cannot exhaust memory.
+        chunks = []
+        total = 0
+        for chunk in response.iter_content(chunk_size=64 * 1024):
+            if not chunk:
+                continue
+            total += len(chunk)
+            if total > MAX_INTERNSHIP_DB_BYTES:
+                return (
+                    BUILTIN_INTERNSHIPS,
+                    f"Internship data at {url} exceeds {MAX_INTERNSHIP_DB_BYTES} bytes.",
+                )
+            chunks.append(chunk)
+        data = json.loads(b"".join(chunks).decode("utf-8"))
+    except (requests.RequestException, ValueError, UnicodeDecodeError) as exc:
         return BUILTIN_INTERNSHIPS, f"Could not load internships from {url} ({exc})."
     if not isinstance(data, list):
         return BUILTIN_INTERNSHIPS, f"Internship data at {url} is not a JSON list."
@@ -54,6 +88,7 @@ def load_internships(url=None, timeout=10):
         if isinstance(item, dict)
         and all(field in item for field in REQUIRED_INTERNSHIP_FIELDS)
         and isinstance(item["skills"], list)
+        and _is_http_url(item["apply_url"])
     ]
     if not postings:
         return BUILTIN_INTERNSHIPS, f"No valid internships found at {url}."
@@ -65,6 +100,9 @@ OFFLINE_QUESTIONS = [
     {"q": "What is Object-Oriented Programming (OOP)?", "options": ["A programming paradigm", "A hardware component", "A database structure", "An operating system"], "a": "A programming paradigm"},
     {"q": "Which data structure uses a Last-In-First-Out (LIFO) model?", "options": ["Queue", "Array", "Stack", "Linked List"], "a": "Stack"},
     {"q": "What is the primary purpose of version control systems like Git?", "options": ["Compiling code", "Tracking code changes and collaboration", "Designing user interfaces", "Scanning for viruses"], "a": "Tracking code changes and collaboration"},
+    {"q": "What does an HTTP 404 status code mean?", "options": ["Server error", "Resource not found", "Unauthorized request", "Redirect"], "a": "Resource not found"},
+    {"q": "In a relational database, what does a PRIMARY KEY uniquely identify?", "options": ["A table column type", "A row in a table", "A database user", "A network port"], "a": "A row in a table"},
+    {"q": "Which Linux command lists files in the current directory?", "options": ["cd", "pwd", "ls", "rm"], "a": "ls"},
 ]
 
 
@@ -95,7 +133,7 @@ def _is_valid_question(item):
     )
 
 
-def parse_questions(response_text):
+def parse_questions(response_text: str) -> list[dict[str, Any]]:
     """Turn the model's text reply into a list of valid question dicts.
 
     Models sometimes wrap the JSON in markdown fences or add a sentence
@@ -118,9 +156,19 @@ def parse_questions(response_text):
 
 
 SUPPORTED_RESUME_TYPES = ["pdf", "docx"]
+MAX_RESUME_BYTES = 5 * 1024 * 1024  # 5 MB upload cap before parsing
 
 
-def read_resume_text(filename, file_bytes):
+def assert_resume_size_ok(file_bytes, limit=MAX_RESUME_BYTES):
+    """Raise ValueError when an upload exceeds the resume size limit."""
+    size = len(file_bytes)
+    if size > limit:
+        raise ValueError(
+            f"Resume is too large ({size} bytes). Maximum allowed is {limit} bytes (5 MB)."
+        )
+
+
+def read_resume_text(filename: str, file_bytes: bytes) -> str:
     """Extract plain text from an uploaded PDF or Word (.docx) resume.
 
     The extension check is case-insensitive, so "Resume.PDF" works too.
@@ -152,7 +200,7 @@ def _skill_pattern(skill):
     return re.compile(r"(?<![\w+#-])" + re.escape(skill) + r"(?![\w+#])")
 
 
-def extract_skills_from_text(text):
+def extract_skills_from_text(text: str) -> list[str]:
     """Return the TARGET_SKILLS mentioned in text, in TARGET_SKILLS order."""
     found = []
     text_lower = text.lower()
@@ -163,8 +211,43 @@ def extract_skills_from_text(text):
     return found
 
 
-def rag_semantic_search(user_profile, user_skills, db_jobs, top_n=3):
-    """Rank internships by TF-IDF cosine similarity to the candidate profile."""
+def shared_skills(user_skills, internship_skills):
+    """Return candidate skills that also appear on the posting (stable order)."""
+    posting = {skill.lower() for skill in internship_skills if isinstance(skill, str)}
+    seen = set()
+    overlap = []
+    for skill in user_skills:
+        key = skill.lower() if isinstance(skill, str) else skill
+        if key in posting and key not in seen:
+            seen.add(key)
+            overlap.append(skill)
+    return overlap
+
+
+# Soft boost when location or education equals the candidate profile (capped at 99).
+PROFILE_MATCH_BOOST = 5
+
+
+def apply_profile_boost(base_score, internship, user_profile):
+    """Add PROFILE_MATCH_BOOST for matching location/education; cap at 99."""
+    score = base_score
+    if internship.get("location") == user_profile.get("location"):
+        score += PROFILE_MATCH_BOOST
+    if internship.get("education") == user_profile.get("education"):
+        score += PROFILE_MATCH_BOOST
+    return min(score, 99)
+
+
+def rag_semantic_search(user_profile: dict[str, Any], user_skills: list[str], db_jobs: list[dict[str, Any]], top_n: int = 3) -> list[dict[str, Any]]:
+    """Rank internships by TF-IDF cosine similarity to the candidate profile.
+
+    Returns an empty list when db_jobs is empty so TfidfVectorizer is never
+    fitted on an empty corpus (which raises ValueError). Matching location
+    or education each add PROFILE_MATCH_BOOST points (score still capped at 99).
+    """
+    if not db_jobs:
+        return []
+
     corpus = [f"{j['title']} {j['company']} {j['location']} {' '.join(j['skills'])} {j['description']}" for j in db_jobs]
     query = f"{user_profile['location']} {user_profile['education']} {' '.join(user_skills)}"
 
@@ -175,7 +258,8 @@ def rag_semantic_search(user_profile, user_skills, db_jobs, top_n=3):
     ranked = []
     for idx, score in enumerate(cosine_similarities):
         intern_data = db_jobs[idx].copy()
-        intern_data['score'] = min(int(score * 100) + 15, 99)
+        base = int(score * 100) + 15
+        intern_data["score"] = apply_profile_boost(base, intern_data, user_profile)
         ranked.append(intern_data)
 
     ranked.sort(key=lambda x: x['score'], reverse=True)
