@@ -34,6 +34,8 @@ BUILTIN_INTERNSHIPS = [
 ]
 
 REQUIRED_INTERNSHIP_FIELDS = ("title", "company", "location", "education", "skills", "description", "apply_url")
+INTERNSHIP_DB_USER_AGENT = "internship-finder/1.0 (+https://github.com/applejuice093/internship_finder)"
+MAX_INTERNSHIP_DB_BYTES = 2 * 1024 * 1024  # 2 MB cap for remote JSON payloads
 
 def _is_http_url(value):
     """True when value is an absolute http(s) URL with a network location."""
@@ -55,10 +57,28 @@ def load_internships(url=None, timeout=10):
     if not url:
         return BUILTIN_INTERNSHIPS, None
     try:
-        response = requests.get(url, timeout=timeout)
+        response = requests.get(
+            url,
+            timeout=timeout,
+            headers={"User-Agent": INTERNSHIP_DB_USER_AGENT},
+            stream=True,
+        )
         response.raise_for_status()
-        data = response.json()
-    except (requests.RequestException, ValueError) as exc:
+        # Cap body size so a huge response cannot exhaust memory.
+        chunks = []
+        total = 0
+        for chunk in response.iter_content(chunk_size=64 * 1024):
+            if not chunk:
+                continue
+            total += len(chunk)
+            if total > MAX_INTERNSHIP_DB_BYTES:
+                return (
+                    BUILTIN_INTERNSHIPS,
+                    f"Internship data at {url} exceeds {MAX_INTERNSHIP_DB_BYTES} bytes.",
+                )
+            chunks.append(chunk)
+        data = json.loads(b"".join(chunks).decode("utf-8"))
+    except (requests.RequestException, ValueError, UnicodeDecodeError) as exc:
         return BUILTIN_INTERNSHIPS, f"Could not load internships from {url} ({exc})."
     if not isinstance(data, list):
         return BUILTIN_INTERNSHIPS, f"Internship data at {url} is not a JSON list."
