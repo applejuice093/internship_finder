@@ -76,6 +76,9 @@ OFFLINE_QUESTIONS = [
     {"q": "What is Object-Oriented Programming (OOP)?", "options": ["A programming paradigm", "A hardware component", "A database structure", "An operating system"], "a": "A programming paradigm"},
     {"q": "Which data structure uses a Last-In-First-Out (LIFO) model?", "options": ["Queue", "Array", "Stack", "Linked List"], "a": "Stack"},
     {"q": "What is the primary purpose of version control systems like Git?", "options": ["Compiling code", "Tracking code changes and collaboration", "Designing user interfaces", "Scanning for viruses"], "a": "Tracking code changes and collaboration"},
+    {"q": "What does an HTTP 404 status code mean?", "options": ["Server error", "Resource not found", "Unauthorized request", "Redirect"], "a": "Resource not found"},
+    {"q": "In a relational database, what does a PRIMARY KEY uniquely identify?", "options": ["A table column type", "A row in a table", "A database user", "A network port"], "a": "A row in a table"},
+    {"q": "Which Linux command lists files in the current directory?", "options": ["cd", "pwd", "ls", "rm"], "a": "ls"},
 ]
 
 
