@@ -6,6 +6,7 @@ and matching code can be unit tested without starting a Streamlit app.
 import json
 import re
 from io import BytesIO
+from typing import Any, Optional
 from urllib.parse import urlparse
 
 import docx
@@ -45,7 +46,7 @@ def _is_http_url(value):
     return parsed.scheme in ("http", "https") and bool(parsed.netloc)
 
 
-def load_internships(url=None, timeout=10):
+def load_internships(url: Optional[str] = None, timeout: int = 10) -> tuple[list[dict[str, Any]], Optional[str]]:
     """Return internship postings from a JSON URL, or the built-in list.
 
     url should point at a JSON array shaped like BUILTIN_INTERNSHIPS (for
@@ -132,7 +133,7 @@ def _is_valid_question(item):
     )
 
 
-def parse_questions(response_text):
+def parse_questions(response_text: str) -> list[dict[str, Any]]:
     """Turn the model's text reply into a list of valid question dicts.
 
     Models sometimes wrap the JSON in markdown fences or add a sentence
@@ -167,7 +168,7 @@ def assert_resume_size_ok(file_bytes, limit=MAX_RESUME_BYTES):
         )
 
 
-def read_resume_text(filename, file_bytes):
+def read_resume_text(filename: str, file_bytes: bytes) -> str:
     """Extract plain text from an uploaded PDF or Word (.docx) resume.
 
     The extension check is case-insensitive, so "Resume.PDF" works too.
@@ -199,7 +200,7 @@ def _skill_pattern(skill):
     return re.compile(r"(?<![\w+#-])" + re.escape(skill) + r"(?![\w+#])")
 
 
-def extract_skills_from_text(text):
+def extract_skills_from_text(text: str) -> list[str]:
     """Return the TARGET_SKILLS mentioned in text, in TARGET_SKILLS order."""
     found = []
     text_lower = text.lower()
@@ -237,7 +238,7 @@ def apply_profile_boost(base_score, internship, user_profile):
     return min(score, 99)
 
 
-def rag_semantic_search(user_profile, user_skills, db_jobs, top_n=3):
+def rag_semantic_search(user_profile: dict[str, Any], user_skills: list[str], db_jobs: list[dict[str, Any]], top_n: int = 3) -> list[dict[str, Any]]:
     """Rank internships by TF-IDF cosine similarity to the candidate profile.
 
     Returns an empty list when db_jobs is empty so TfidfVectorizer is never
