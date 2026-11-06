@@ -210,6 +210,19 @@ def extract_skills_from_text(text):
     return found
 
 
+def shared_skills(user_skills, internship_skills):
+    """Return candidate skills that also appear on the posting (stable order)."""
+    posting = {skill.lower() for skill in internship_skills if isinstance(skill, str)}
+    seen = set()
+    overlap = []
+    for skill in user_skills:
+        key = skill.lower() if isinstance(skill, str) else skill
+        if key in posting and key not in seen:
+            seen.add(key)
+            overlap.append(skill)
+    return overlap
+
+
 # Soft boost when location or education equals the candidate profile (capped at 99).
 PROFILE_MATCH_BOOST = 5
 

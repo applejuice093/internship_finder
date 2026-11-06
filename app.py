@@ -15,6 +15,7 @@ from core import (
     parse_questions,
     rag_semantic_search,
     read_resume_text,
+    shared_skills,
 )
 
 
@@ -237,6 +238,10 @@ elif st.session_state.app_step == 'results':
             with col_a:
                 st.markdown(f"### {intern['title']} @ {intern['company']}")
                 st.caption(f"📍 {intern['location']} | 🎓 {intern['education']}")
+                overlap = shared_skills(data["skills"], intern.get("skills", []))
+                if overlap:
+                    # Plain text caption — no HTML — so skill names cannot XSS.
+                    st.caption("Shared skills: " + ", ".join(overlap))
                 st.write(intern['description'])
             with col_b:
                 color = "#059669" if intern['score'] > 60 else "#d97706"

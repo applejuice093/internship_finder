@@ -8,6 +8,7 @@ from core import (
     PROFILE_MATCH_BOOST,
     apply_profile_boost,
     extract_skills_from_text,
+    shared_skills,
     parse_questions,
     rag_semantic_search,
 )
@@ -101,4 +102,6 @@ def test_profile_match_boosts_score():
     assert apply_profile_boost(95, job, profile) == 99  # still capped
 
 
-
+def test_shared_skills_preserves_candidate_order_and_dedupes():
+    assert shared_skills(["python", "sql", "python", "aws"], ["aws", "python", "docker"]) == ["python", "aws"]
+    assert shared_skills(["react"], ["python"]) == []
