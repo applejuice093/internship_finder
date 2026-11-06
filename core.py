@@ -135,6 +135,16 @@ def parse_questions(response_text):
 
 
 SUPPORTED_RESUME_TYPES = ["pdf", "docx"]
+MAX_RESUME_BYTES = 5 * 1024 * 1024  # 5 MB upload cap before parsing
+
+
+def assert_resume_size_ok(file_bytes, limit=MAX_RESUME_BYTES):
+    """Raise ValueError when an upload exceeds the resume size limit."""
+    size = len(file_bytes)
+    if size > limit:
+        raise ValueError(
+            f"Resume is too large ({size} bytes). Maximum allowed is {limit} bytes (5 MB)."
+        )
 
 
 def read_resume_text(filename, file_bytes):

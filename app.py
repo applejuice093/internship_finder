@@ -8,6 +8,7 @@ from google.genai import types
 from core import (
     OFFLINE_QUESTIONS,
     SUPPORTED_RESUME_TYPES,
+    assert_resume_size_ok,
     build_question_prompt,
     extract_skills_from_text,
     load_internships,
@@ -104,7 +105,9 @@ def generate_dynamic_questions(skills, api_key, num_questions=3):
         return OFFLINE_QUESTIONS[:num_questions]
 
 def read_file_smart(uploaded_file):
-    return read_resume_text(uploaded_file.name, uploaded_file.getvalue())
+    file_bytes = uploaded_file.getvalue()
+    assert_resume_size_ok(file_bytes)
+    return read_resume_text(uploaded_file.name, file_bytes)
 
 if 'app_step' not in st.session_state: st.session_state.app_step = 'upload' 
 if 'parsed_data' not in st.session_state: st.session_state.parsed_data = {}
@@ -132,6 +135,10 @@ if st.session_state.app_step == 'upload':
                 with st.spinner("Parsing documents & fetching dynamic assessment via internet..."):
                     try:
                         text = read_file_smart(uploaded_file)
+                    except ValueError as exc:
+                        # Size limit or unsupported type from core helpers.
+                        st.error(str(exc))
+                        st.stop()
                     except Exception:  # corrupt, encrypted or mislabelled file
                         st.error("Could not read this file. Please upload a valid, unencrypted PDF or DOCX resume.")
                         st.stop()
