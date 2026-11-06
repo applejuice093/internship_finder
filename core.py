@@ -210,11 +210,26 @@ def extract_skills_from_text(text):
     return found
 
 
+# Soft boost when location or education equals the candidate profile (capped at 99).
+PROFILE_MATCH_BOOST = 5
+
+
+def apply_profile_boost(base_score, internship, user_profile):
+    """Add PROFILE_MATCH_BOOST for matching location/education; cap at 99."""
+    score = base_score
+    if internship.get("location") == user_profile.get("location"):
+        score += PROFILE_MATCH_BOOST
+    if internship.get("education") == user_profile.get("education"):
+        score += PROFILE_MATCH_BOOST
+    return min(score, 99)
+
+
 def rag_semantic_search(user_profile, user_skills, db_jobs, top_n=3):
     """Rank internships by TF-IDF cosine similarity to the candidate profile.
 
     Returns an empty list when db_jobs is empty so TfidfVectorizer is never
-    fitted on an empty corpus (which raises ValueError).
+    fitted on an empty corpus (which raises ValueError). Matching location
+    or education each add PROFILE_MATCH_BOOST points (score still capped at 99).
     """
     if not db_jobs:
         return []
@@ -229,7 +244,8 @@ def rag_semantic_search(user_profile, user_skills, db_jobs, top_n=3):
     ranked = []
     for idx, score in enumerate(cosine_similarities):
         intern_data = db_jobs[idx].copy()
-        intern_data['score'] = min(int(score * 100) + 15, 99)
+        base = int(score * 100) + 15
+        intern_data["score"] = apply_profile_boost(base, intern_data, user_profile)
         ranked.append(intern_data)
 
     ranked.sort(key=lambda x: x['score'], reverse=True)

@@ -5,6 +5,8 @@ import pytest
 from core import (
     BUILTIN_INTERNSHIPS,
     OFFLINE_QUESTIONS,
+    PROFILE_MATCH_BOOST,
+    apply_profile_boost,
     extract_skills_from_text,
     parse_questions,
     rag_semantic_search,
@@ -86,4 +88,17 @@ def test_parse_questions_raises_when_nothing_usable(text):
 def test_rag_search_returns_empty_list_for_empty_database():
     profile = {"location": "Remote", "education": "Graduate"}
     assert rag_semantic_search(profile, ["python"], [], top_n=3) == []
+
+
+def test_profile_match_boosts_score():
+    """Location and education matches each add PROFILE_MATCH_BOOST, capped at 99."""
+    job = {"location": "Remote", "education": "Graduate"}
+    profile = {"location": "Remote", "education": "Graduate"}
+    other = {"location": "Delhi", "education": "Diploma"}
+    assert apply_profile_boost(40, job, profile) == 40 + 2 * PROFILE_MATCH_BOOST
+    assert apply_profile_boost(40, job, other) == 40
+    assert apply_profile_boost(40, job, {"location": "Remote", "education": "Diploma"}) == 40 + PROFILE_MATCH_BOOST
+    assert apply_profile_boost(95, job, profile) == 99  # still capped
+
+
 
