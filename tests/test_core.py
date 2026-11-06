@@ -78,3 +78,9 @@ def test_parse_questions_drops_malformed_questions():
 def test_parse_questions_raises_when_nothing_usable(text):
     with pytest.raises(ValueError):
         parse_questions(text)
+
+
+def test_rag_search_returns_empty_list_for_empty_database():
+    profile = {"location": "Remote", "education": "Graduate"}
+    assert rag_semantic_search(profile, ["python"], [], top_n=3) == []
+

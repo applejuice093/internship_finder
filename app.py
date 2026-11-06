@@ -220,7 +220,10 @@ elif st.session_state.app_step == 'results':
         if db_error:
             st.warning(db_error + " Showing the built-in sample internships instead.")
         top_matches = rag_semantic_search({"location": data["location"], "education": data["education"]}, data["skills"], db_jobs, top_n=3)
-    
+
+    if not top_matches:
+        st.info("No internships are available to match against right now. Try again later or check INTERNSHIP_DB_URL.")
+
     for intern in top_matches:
         with st.container(border=True):
             col_a, col_b = st.columns([3, 1])

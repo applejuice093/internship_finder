@@ -174,7 +174,14 @@ def extract_skills_from_text(text):
 
 
 def rag_semantic_search(user_profile, user_skills, db_jobs, top_n=3):
-    """Rank internships by TF-IDF cosine similarity to the candidate profile."""
+    """Rank internships by TF-IDF cosine similarity to the candidate profile.
+
+    Returns an empty list when db_jobs is empty so TfidfVectorizer is never
+    fitted on an empty corpus (which raises ValueError).
+    """
+    if not db_jobs:
+        return []
+
     corpus = [f"{j['title']} {j['company']} {j['location']} {' '.join(j['skills'])} {j['description']}" for j in db_jobs]
     query = f"{user_profile['location']} {user_profile['education']} {' '.join(user_skills)}"
 
