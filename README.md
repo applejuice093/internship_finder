@@ -10,14 +10,15 @@ recommends the internships whose descriptions best match the profile.
 1. **Profile and resume**: pick your highest education and preferred
    location, then upload a resume (PDF or DOCX).
 2. **Skill extraction**: the resume text is scanned for known skills
-   (Python, C++, SQL, React, Docker, AWS and so on; see `TARGET_SKILLS` in
-   `core.py`).
+   (Python, C++, SQL, React, Flask, MongoDB, Docker, AWS, Linux, Excel and
+   so on; see `TARGET_SKILLS` in `core.py`).
 3. **Skill assessment**: Gemini writes 3 multiple-choice questions about
    those skills. Without an API key, or if the AI call fails, a built-in
    question bank is used and the app tells you so.
 4. **Matching**: postings and the candidate profile are turned into TF-IDF
-   vectors and ranked by cosine similarity. The top 3 are shown with an
-   apply link.
+   vectors and ranked by cosine similarity. Matching preferred location or
+   education each add a small soft boost (`PROFILE_MATCH_BOOST`, still
+   capped at 99). The top 3 are shown with shared skills and an apply link.
 
 ## Quick start
 
@@ -73,8 +74,10 @@ cp .streamlit/secrets.toml.example .streamlit/secrets.toml
 ]
 ```
 
-Postings missing a field are skipped. If the URL can't be loaded, the app
-shows a warning and falls back to the samples.
+Postings missing a field, or whose `apply_url` is not an absolute `http://`
+or `https://` URL, are skipped. If the URL can't be loaded (or the payload
+exceeds 2 MB), the app shows a warning and falls back to the six built-in
+sample internships.
 
 ## Project structure
 
@@ -93,9 +96,21 @@ pytest          # unit + end-to-end tests (no API key or network needed)
 ruff check .    # lint
 ```
 
+## Resume upload limits
+
+Resumes larger than **5 MB** are rejected before parsing (`MAX_RESUME_BYTES`
+in `core.py`) so oversized PDFs cannot hang the extractors.
+
+## Scoring
+
+Match percentages start from TF-IDF cosine similarity (scaled and offset),
+then receive `PROFILE_MATCH_BOOST` (+5) for each of location and education
+that equals the candidate profile. The final value is capped at 99. They
+are similarity scores, not a probability of being selected.
+
 ## Limitations
 
 - Image-only (scanned) PDFs contain no text, so no skills can be found. The
   app warns when this happens.
-- Match percentages are TF-IDF similarity scores with a small offset, not a
-  probability of being selected.
+- The built-in sample set currently has **6** internships covering backend,
+  frontend, data/cloud, Flask/MongoDB, HTML/CSS and Redis/ops profiles.
