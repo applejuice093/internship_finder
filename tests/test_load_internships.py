@@ -56,3 +56,24 @@ def test_non_list_payload_falls_back(monkeypatch):
     postings, error = load_internships("https://example.com/db.json")
     assert postings is BUILTIN_INTERNSHIPS
     assert "not a JSON list" in error
+
+
+def test_skips_postings_with_non_http_apply_url(monkeypatch):
+    good = dict(BUILTIN_INTERNSHIPS[0], title="Good Apply URL")
+    bad_scheme = dict(good, title="Javascript URL", apply_url="javascript:alert(1)")
+    missing_host = dict(good, title="Relative URL", apply_url="/apply")
+    ftp = dict(good, title="FTP URL", apply_url="ftp://example.com/job")
+    monkeypatch.setattr(
+        core.requests, "get", fake_get([good, bad_scheme, missing_host, ftp, {"title": "incomplete"}])
+    )
+    postings, error = load_internships("https://example.com/db.json")
+    assert error is None
+    assert postings == [good]
+
+
+def test_all_bad_apply_urls_falls_back(monkeypatch):
+    bad = dict(BUILTIN_INTERNSHIPS[0], apply_url="not-a-url")
+    monkeypatch.setattr(core.requests, "get", fake_get([bad]))
+    postings, error = load_internships("https://example.com/db.json")
+    assert postings is BUILTIN_INTERNSHIPS
+    assert "No valid internships" in error

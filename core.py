@@ -6,6 +6,7 @@ and matching code can be unit tested without starting a Streamlit app.
 import json
 import re
 from io import BytesIO
+from urllib.parse import urlparse
 
 import docx
 import pdfplumber
@@ -30,14 +31,22 @@ BUILTIN_INTERNSHIPS = [
 
 REQUIRED_INTERNSHIP_FIELDS = ("title", "company", "location", "education", "skills", "description", "apply_url")
 
+def _is_http_url(value):
+    """True when value is an absolute http(s) URL with a network location."""
+    if not isinstance(value, str):
+        return False
+    parsed = urlparse(value.strip())
+    return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+
 
 def load_internships(url=None, timeout=10):
     """Return internship postings from a JSON URL, or the built-in list.
 
     url should point at a JSON array shaped like BUILTIN_INTERNSHIPS (for
     example the "Raw" link of a GitHub Gist). Postings missing a required
-    field are skipped. Returns (postings, error_message); error_message is
-    None on success and explains why the built-in list was used otherwise.
+    field, or whose apply_url is not an absolute http(s) URL, are skipped.
+    Returns (postings, error_message); error_message is None on success and
+    explains why the built-in list was used otherwise.
     """
     if not url:
         return BUILTIN_INTERNSHIPS, None
@@ -54,6 +63,7 @@ def load_internships(url=None, timeout=10):
         if isinstance(item, dict)
         and all(field in item for field in REQUIRED_INTERNSHIP_FIELDS)
         and isinstance(item["skills"], list)
+        and _is_http_url(item["apply_url"])
     ]
     if not postings:
         return BUILTIN_INTERNSHIPS, f"No valid internships found at {url}."
