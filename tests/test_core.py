@@ -21,6 +21,9 @@ from core import (
         ("Objective-C and C# only", []),
         ("GitHub user", ["github"]),
         ("Built APIs with Node.js and React", ["react", "node"]),
+        ("Flask + MongoDB on Linux", ["flask", "mongodb", "linux"]),
+        ("Redis cache and Excel reports", ["redis", "excel"]),
+        ("HTML, CSS and Keras", ["html", "css", "keras"]),
     ],
 )
 def test_extract_skills(text, expected):

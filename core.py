@@ -16,10 +16,11 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 # Skills we look for in a resume, grouped only for readability.
 TARGET_SKILLS = {
-    "Core_Languages": ["python", "c++", "c", "java", "javascript", "sql", "typescript"],
-    "AI_ML": ["pytorch", "tensorflow", "scikit-learn", "pandas", "llm"],
-    "Frameworks": ["fastapi", "react", "node", "django", "spring"],
-    "Daily_Tooling": ["git", "github", "docker", "aws"],
+    "Core_Languages": ["python", "c++", "c", "java", "javascript", "sql", "typescript", "html", "css"],
+    "AI_ML": ["pytorch", "tensorflow", "scikit-learn", "pandas", "llm", "keras"],
+    "Frameworks": ["fastapi", "flask", "react", "node", "django", "spring"],
+    "Data_Stores": ["mongodb", "redis"],
+    "Daily_Tooling": ["git", "github", "docker", "aws", "linux", "excel"],
 }
 
 # Built-in sample postings used as the internship "database".
