@@ -8,9 +8,9 @@ from core import (
     PROFILE_MATCH_BOOST,
     apply_profile_boost,
     extract_skills_from_text,
-    shared_skills,
     parse_questions,
     rag_semantic_search,
+    shared_skills,
 )
 
 
