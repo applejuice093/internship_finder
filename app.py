@@ -1,3 +1,4 @@
+import html
 import os
 
 import streamlit as st
@@ -206,7 +207,9 @@ elif st.session_state.app_step == 'results':
     c3.metric("Profile Status", "Ready for Matching")
     
     st.markdown("### 🔑 Verified Competencies")
-    skills_html = "".join([f"<span class='skill-badge'>{skill.upper()}</span>" for skill in data['skills']])
+    skills_html = "".join(
+        f"<span class='skill-badge'>{html.escape(skill.upper())}</span>" for skill in data["skills"]
+    )
     st.markdown(skills_html, unsafe_allow_html=True)
     
     st.markdown("---")
